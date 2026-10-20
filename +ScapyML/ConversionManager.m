@@ -74,6 +74,34 @@ classdef ConversionManager
             end
         end
         
+        function wireVec = convertVector(obj, fieldName, physicalVec)
+            % Convert a whole column at once. Tries the conversion function
+            % on the full vector (fast); accepts that result only if it has
+            % the same size AND matches the element-wise result on a sample.
+            % Otherwise falls back to element-wise convert() (identical to
+            % the old behaviour).
+            if ~obj.Conversions.isKey(fieldName)
+                wireVec = physicalVec;
+                return;
+            end
+            convFunc = obj.Conversions(fieldName);
+            n = numel(physicalVec);
+            try
+                cand = convFunc(physicalVec);
+                if isnumeric(cand) && isequal(size(cand), size(physicalVec))
+                    idx    = unique(round(linspace(1, n, min(n, 64))));
+                    sample = arrayfun(@(v) obj.convert(fieldName, v), physicalVec(idx));
+                    if isequaln(sample, cand(idx))
+                        wireVec = cand;
+                        return;
+                    end
+                end
+            catch
+                % not vectorizable -> element-wise below
+            end
+            wireVec = arrayfun(@(v) obj.convert(fieldName, v), physicalVec);
+        end
+
         function tf = hasConversion(obj, fieldName)
             % Check if a conversion is defined for this field
             tf = obj.Conversions.isKey(fieldName);

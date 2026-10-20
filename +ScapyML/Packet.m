@@ -28,6 +28,18 @@ classdef Packet < handle
 
         function obj = Packet(protoNameOrDef, varargin)
             % Constructor.  Accepts a protocol name (string) or ProtocolDef.
+            %
+            % Internal fast path (bulk loaders only):
+            %   Packet(protoDef, '__values__', valuesStruct)
+            % skips the field-tree traversal and the Dirty-map creation.
+            if nargin == 3 && isa(protoNameOrDef,'ScapyML.ProtocolDef') && ...
+                    ischar(varargin{1}) && strcmp(varargin{1},'__values__')
+                obj.Proto  = protoNameOrDef;
+                obj.Values = varargin{2};
+                obj.Dirty  = [];     % created lazily by set()
+                obj.Next   = [];
+                return;
+            end
             if ischar(protoNameOrDef) || isstring(protoNameOrDef)
                 obj.Proto = ScapyML.ProtocolRegistry.instance().get(char(protoNameOrDef));
             elseif isa(protoNameOrDef,'ScapyML.ProtocolDef')
@@ -211,6 +223,9 @@ classdef Packet < handle
             end
             
             obj.Values.(fieldName) = value;
+            if ~isa(obj.Dirty,'containers.Map')   % lazily created (bulk fast path)
+                obj.Dirty = containers.Map('KeyType','char','ValueType','logical');
+            end
             obj.Dirty(fieldName)   = true;
         end
 
@@ -378,15 +393,21 @@ classdef Packet < handle
             % protoDef      - ScapyML.ProtocolDef (resolved once outside the loop)
             % defaultValues - struct with all fields pre-initialised to defaults
             % overrides     - struct of fieldName->value to apply on top
-            pkt        = ScapyML.Packet(protoDef);  % Proto already resolved
-            pkt.Values = defaultValues;              % Stamp in defaults directly
-            fields     = fieldnames(overrides);
+            vals   = defaultValues;
+            fields = fieldnames(overrides);
             for k = 1:numel(fields)
                 fn = fields{k};
-                if isfield(pkt.Values, fn)
-                    pkt.Values.(fn) = overrides.(fn);
+                if isfield(vals, fn)
+                    vals.(fn) = overrides.(fn);
                 end
             end
+            pkt = ScapyML.Packet(protoDef, '__values__', vals);
+        end
+
+        function pkt = fromValues(protoDef, values)
+            % Fastest bulk constructor: 'values' is a complete Values struct
+            % (all fields already resolved). No validation, no traversal.
+            pkt = ScapyML.Packet(protoDef, '__values__', values);
         end
 
         function fields = collectFields(fieldList)

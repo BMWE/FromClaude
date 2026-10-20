@@ -72,46 +72,12 @@ function pkts = ScapyML_fromCSV(protoName, csvFile, defaultsFile, conversionFile
         converter = ScapyML.ConversionManager();  % empty -> pass-through
     end
 
-    % ---- Step 3: bulk-read the CSV and extract mapped columns ----
-    data = readtable(csvFile);
-    csvCols = data.Properties.VariableNames;
-    nRows   = height(data);
-    nCols   = numel(csvCols);
+    % ---- Step 3: bulk-read ONLY the protocol-mapped CSV columns ----
+    % (reading all 170+ columns and building structs per row was the
+    % bottleneck for large files; see CsvLoader.readColumns/buildPackets)
+    % Conversions are applied to raw (physical) values once per column.
+    T    = ScapyML.CsvLoader.readColumns(csvFile, baseNames);
 
-    % IMPORTANT: conversions are applied to raw CSV (physical) values
-    % only. We always read from 'data' (fresh readtable result) -- never
-    % from a previously-converted cache -- to prevent circular/double
-    % scaling, matching the GUI loader's own documented guard.
-    colData = struct();
-    for j = 1:nCols
-        fn = csvCols{j};
-        if ~isfield(defaultValues, fn)
-            continue;  % column doesn't map to a protocol field -- skip
-        end
-        try
-            rawVec = data.(fn);
-            if isnumeric(rawVec)
-                if converter.hasConversion(fn)
-                    wireVec = arrayfun(@(v) converter.convert(fn, v), rawVec);
-                else
-                    wireVec = rawVec;
-                end
-                colData.(fn) = wireVec;
-            end
-        catch
-            % Column present but not usable (e.g. non-numeric) -- skip
-        end
-    end
-    mappedFields = fieldnames(colData);
-
-    % ---- Step 4: build one packet per row ----
-    pkts = cell(1, nRows);
-    for i = 1:nRows
-        overrides = struct();
-        for k = 1:numel(mappedFields)
-            fn = mappedFields{k};
-            overrides.(fn) = colData.(fn)(i);
-        end
-        pkts{i} = ScapyML.Packet.fromValuesStruct(proto, defaultValues, overrides);
-    end
+    % ---- Step 4: build one packet per row (block-vectorized) ----
+    pkts = ScapyML.CsvLoader.buildPackets(proto, defaultValues, T, converter);
 end

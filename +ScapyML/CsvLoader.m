@@ -75,6 +75,79 @@ classdef CsvLoader
         end
 
         % ----------------------------------------------------------------
+        % Bulk path (used by ScapyML_fromCSV and the GUI)
+        % ----------------------------------------------------------------
+
+        function T = readColumns(csvFile, wanted)
+            % Read ONLY the columns whose names are in 'wanted' (cellstr).
+            % Type detection is identical to readtable(csvFile); unwanted
+            % columns are simply not converted/stored, which is the big
+            % saving for wide files (e.g. 170 columns x 150k rows).
+            opts   = detectImportOptions(csvFile);
+            sel    = opts.VariableNames(ismember(opts.VariableNames, wanted));
+            opts.SelectedVariableNames = sel;
+            T = readtable(csvFile, opts);
+        end
+
+        function [pkts, cancelled] = buildPackets(proto, defaultValues, T, converter, progressFcn)
+            % Build one Packet per row of table T.
+            %   defaultValues - struct of ALL protocol fields at defaults
+            %   converter     - ScapyML.ConversionManager
+            %   progressFcn   - optional @(i,n) -> true to cancel
+            % Conversions are applied once to the raw column (no double scaling).
+            if nargin < 5, progressFcn = []; end
+            cancelled = false;
+            nRows = height(T);
+            names = T.Properties.VariableNames;
+
+            % -- extract mapped numeric columns, convert once per column --
+            mappedNames = {};
+            mappedVecs  = {};
+            for j = 1:numel(names)
+                fn = names{j};
+                if ~isfield(defaultValues, fn), continue; end
+                raw = T.(fn);
+                if ~isnumeric(raw), continue; end
+                if converter.hasConversion(fn)
+                    raw = converter.convertVector(fn, raw);
+                end
+                mappedNames{end+1} = fn;  %#ok<AGROW>
+                mappedVecs{end+1}  = raw; %#ok<AGROW>
+            end
+
+            % -- template cell row holding every protocol field's default --
+            allNames = fieldnames(defaultValues);
+            baseCell = struct2cell(defaultValues);          % nAll x 1
+            [~, idx] = ismember(mappedNames, allNames);     % positions to override
+            nMapped  = numel(mappedNames);
+
+            pkts = cell(1, nRows);
+            blockSize = 4096;                               % bounds memory
+            updateStep = max(1, floor(nRows/200));
+            for b0 = 1:blockSize:nRows
+                rows = b0:min(b0+blockSize-1, nRows);
+                nb   = numel(rows);
+                blk  = cell(nb, nMapped);                   % keeps each column's class
+                for k = 1:nMapped
+                    blk(:,k) = num2cell(mappedVecs{k}(rows));
+                end
+                for r = 1:nb
+                    i = rows(r);
+                    v = baseCell;
+                    v(idx) = blk(r,:);
+                    pkts{i} = ScapyML.Packet.fromValues(proto, cell2struct(v, allNames, 1));
+                    if ~isempty(progressFcn) && mod(i, updateStep) == 0
+                        if progressFcn(i, nRows)
+                            cancelled = true;
+                            pkts = pkts(1:i);
+                            return;
+                        end
+                    end
+                end
+            end
+        end
+
+        % ----------------------------------------------------------------
         % Helpers
         % ----------------------------------------------------------------
 

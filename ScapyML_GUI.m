@@ -790,7 +790,6 @@ function ScapyML_GUI()
                 end
             else
                 % Load CSV without defaults
-                data = readtable(state.csvFile);
                 state.packets = {};
                 
                 % Load conversions if specified
@@ -802,71 +801,27 @@ function ScapyML_GUI()
                 end
                 
                 % ---- Fast bulk CSV load ----
-                % IMPORTANT: conversions are applied to raw CSV (physical) values only.
-                % We always read from 'data' (fresh readtable result) — never from a
-                % previously converted cache — to prevent circular/double scaling.
-
-                proto    = ScapyML.ProtocolRegistry.instance().get(state.selectedProtocol);
-                csvCols  = data.Properties.VariableNames;
-                nRows    = height(data);
-                nCols    = numel(csvCols);
-
-                % Resolve which CSV columns map to valid protocol fields
-                % and extract each as a RAW column vector, then apply conversion once.
-                colData  = struct();   % colData.(fieldName) = nRows x 1 wire-value vector
-                for j = 1:nCols
-                    fn = csvCols{j};
-                    try
-                        rawVec = data.(fn);    % always raw from readtable — never pre-converted
-                        if isnumeric(rawVec)
-                            if converter.hasConversion(fn)
-                                % Apply physical→wire conversion exactly once per load
-                                wireVec = arrayfun(@(v) converter.convert(fn, v), rawVec);
-                            else
-                                wireVec = rawVec;
-                            end
-                            colData.(fn) = wireVec;
-                        end
-                    catch
-                        % Column doesn't map to a protocol field — skip
-                    end
-                end
-                mappedFields = fieldnames(colData);
-
-                % Build default Values struct once (clone per row is fast struct copy)
+                % Only protocol-mapped columns are read; conversions are applied
+                % once per raw column (never to already-converted data).
+                proto        = ScapyML.ProtocolRegistry.instance().get(state.selectedProtocol);
                 allFieldDefs = ScapyML.Packet.collectFields(proto.Fields);
                 defaultValues = struct();
                 for k = 1:numel(allFieldDefs)
                     defaultValues.(allFieldDefs{k}.Name) = allFieldDefs{k}.DefaultVal;
                 end
-
-                % Pre-allocate output
-                state.packets = cell(1, nRows);
-
+                
+                appendOutput('  Reading CSV columns...');
+                drawnow;
+                data  = ScapyML.CsvLoader.readColumns(state.csvFile, fieldnames(defaultValues));
+                nRows = height(data);
+                
                 wb = waitbar(0, 'Loading CSV...', ...
                     'Name', 'Loading Packets', ...
                     'CreateCancelBtn', 'setappdata(gcbf,''cancelled'',true)');
                 setappdata(wb, 'cancelled', false);
-                cancelled = false;
-                updateStep = max(1, floor(nRows / 200));
-
-                for i = 1:nRows
-                    if mod(i, updateStep) == 0
-                        if getappdata(wb, 'cancelled')
-                            cancelled = true;
-                            state.packets = state.packets(1:i-1);
-                            break;
-                        end
-                        waitbar(i/nRows, wb, sprintf('Loading CSV... %d / %d', i, nRows));
-                    end
-                    % Build per-row overrides struct from pre-extracted columns
-                    overrides = struct();
-                    for k = 1:numel(mappedFields)
-                        fn = mappedFields{k};
-                        overrides.(fn) = colData.(fn)(i);
-                    end
-                    state.packets{i} = ScapyML.Packet.fromValuesStruct(proto, defaultValues, overrides);
-                end
+                progressFcn = @(i, n) guiLoadProgress(wb, i, n);
+                [state.packets, cancelled] = ScapyML.CsvLoader.buildPackets( ...
+                    proto, defaultValues, data, converter, progressFcn);
                 delete(wb);
                 if cancelled
                     appendOutput(sprintf('⚠ Cancelled — loaded %d / %d packets', numel(state.packets), nRows));
@@ -885,6 +840,17 @@ function ScapyML_GUI()
         end
     end
     
+    function cancel = guiLoadProgress(wb, i, n)
+        % Progress callback for CsvLoader.buildPackets; returns true to cancel.
+        cancel = false;
+        if ~isvalid(wb), cancel = true; return; end
+        if getappdata(wb, 'cancelled')
+            cancel = true;
+            return;
+        end
+        waitbar(i/n, wb, sprintf('Loading CSV... %d / %d', i, n));
+    end
+
     function sendPackets()
         if isempty(state.currentPacket) && isempty(state.packets)
             appendOutput('No packets to send');
@@ -1056,7 +1022,7 @@ function ScapyML_GUI()
                     end
                     
                     try
-                        data = readtable(state.csvFile);
+                        data = ScapyML.CsvLoader.readColumns(state.csvFile, {timestampCol});
                         if ~ismember(timestampCol, data.Properties.VariableNames)
                             appendOutput(sprintf('✗ Column "%s" not found in CSV', timestampCol));
                             return;
