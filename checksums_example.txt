@@ -1,0 +1,38 @@
+# ScapyML Checksum File Example
+# Format: fieldName = @(data) expression
+#
+# Variable 'data' is uint8 array of complete packet binary
+# Function must return scalar numeric value
+
+# Simple sum (8-bit) - most common
+checksum = @(data) mod(sum(uint16(data)), 256)
+
+# Sum (16-bit) - for larger checksums
+checksum16 = @(data) mod(sum(uint16(data)), 65536)
+
+# XOR checksum - lightweight
+xor_checksum = @(data) bitxor(data(1), xor(data(2:end)))
+
+# Two's complement (8-bit) - many protocols use this
+twos_comp = @(data) mod(-sum(uint16(data)), 256)
+
+# Ones' complement (IP-style)
+ones_comp = @(data) bitcmp(mod(sum(uint16(data)), 65536), 'uint16')
+
+# Header-only checksum (first 10 bytes)
+header_sum = @(data) mod(sum(uint16(data(1:min(10,end)))), 256)
+
+# CRC-like with carry
+crc_like = @(data) mod(sum(uint32(data)) + floor(sum(uint32(data))/256), 256)
+
+# Weighted sum (position-dependent)
+weighted = @(data) mod(sum(uint32(data) .* uint32(1:numel(data))), 256)
+
+# ============================================================================
+# USAGE:
+#   cm = ScapyML.ChecksumManager('checksums.txt');
+#   pkt = ScapyML.Packet('MyProtocol');
+#   pkt.set('msg_id', 42);
+#   pkt = cm.applyChecksums(pkt);  % Calculates and sets checksum
+#   binary = pkt.build();
+# ============================================================================

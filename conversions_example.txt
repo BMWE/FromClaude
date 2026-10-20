@@ -1,0 +1,44 @@
+# ScapyML Conversion File Example
+# Format: fieldName = @(x) expression
+#
+# This file defines physical-to-wire value conversions
+# CSV contains physical values, wire format uses converted values
+#
+# AZIMUTH EXAMPLE (from your specification):
+# - Physical: 0 to 359.995 degrees
+# - Wire: 0 to 65535 (16-bit unsigned)
+# - LSB = 360 / 2^16 = 0.005493 deg
+# - Formula: wire = physical / 360 * 65536
+# - Example: 60° -> round(60/360*65536) = 10922
+
+# Antenna azimuth (0-359.995 deg -> 0-65535)
+azimuth = @(x) round(x / 360 * 65536)
+
+# Antenna elevation (-90 to +90 deg -> 0-65535)
+elevation = @(x) round((x + 90) / 180 * 65536)
+
+# Temperature with offset and scaling (-40 to +85°C -> 0-1250, 0.1°C resolution)
+temperature = @(x) round((x + 40) * 10)
+
+# Pressure (300-1100 hPa -> 0-65535)
+pressure = @(x) round((x - 300) / 800 * 65536)
+
+# Latitude (-90 to +90 -> 0-65535 or use standard scaling)
+latitude = @(x) round((x + 90) / 180 * 65536)
+
+# Longitude (-180 to +180 -> 0-65535)
+longitude = @(x) round((x + 180) / 360 * 65536)
+
+# Percentage (0-100% -> 0-255 for 8-bit field)
+battery_pct = @(x) round(x * 255 / 100)
+
+# Direct mapping (no conversion) - useful as placeholder
+status = @(x) x
+flags = @(x) x
+
+# Complex example: Voltage with offset and gain
+# Physical: 0-5V, Wire: 0-4095 (12-bit ADC), Gain=2, Offset=100
+# voltage_raw = @(x) round(x * 2 * 4095 / 5) + 100
+
+# Example with clamping
+# speed = @(x) min(max(round(x * 10), 0), 65535)
