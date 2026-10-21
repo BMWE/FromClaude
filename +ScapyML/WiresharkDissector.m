@@ -185,13 +185,9 @@ classdef WiresharkDissector
                     nestedSubtreeName = sprintf('subtree_%s', f.Name);
 
                     if f.IsUnion
-                        lines{end+1} = sprintf('%s-- [union: %s]  all members at byte %d', ...
-                            indent, f.Name, nestedByteOffset);
                         lines{end+1} = sprintf('%slocal %s = %s:add(buffer(%d, %d), "%s (union)")', ...
                             indent, nestedSubtreeName, subtreeName, nestedByteOffset, nestedBytes, f.Name);
                     else
-                        lines{end+1} = sprintf('%s-- [struct: %s]  at byte %d, size %d', ...
-                            indent, f.Name, nestedByteOffset, nestedBytes);
                         lines{end+1} = sprintf('%slocal %s = %s:add(buffer(%d, %d), "%s")', ...
                             indent, nestedSubtreeName, subtreeName, nestedByteOffset, nestedBytes, f.Name);
                     end
@@ -241,7 +237,6 @@ classdef WiresharkDissector
 
             if fd.IsArray
                 arraySize  = fd.ArraySize;
-                lines{end+1} = sprintf('%s-- [array] %s[%d]', indent, fd.Name, arraySize);
 
                 if fd.IsBitField,   elemBits = fd.BitSize;
                 elseif isFloat,     elemBits = 32;
@@ -285,8 +280,6 @@ classdef WiresharkDissector
                 bits   = fd.BitSize;
                 nbytes = ceil((mod(bitOffset, 8) + bits) / 8);
                 addM   = ScapyML.WiresharkDissector.addMethod(fd.Endian, nbytes);
-                lines{end+1} = sprintf('%s-- [bit-field] %s (%d bits at byte %d bit %d)', ...
-                    indent, fd.Name, bits, byteOff, mod(bitOffset, 8));
                 lines{end+1} = sprintf('%s%s:%s(f.%s, buffer(%d, %d))', ...
                     indent, subtreeName, addM, luaKey, byteOff, nbytes);
 
@@ -450,7 +443,6 @@ classdef WiresharkDissector
             shift  = nbytes*8 - mod(bitOffset, 8) - bits;
             mask   = bitand(2^bits - 1, 2^32 - 1);
             
-            lines{end+1} = sprintf('%s-- %s (%d bits)', indent, fd.Name, bits);
             lines{end+1} = sprintf('%sdo', indent);
             lines{end+1} = sprintf('%s  local raw = buffer(%d, %d):uint()', indent, byteOff, nbytes);
             lines{end+1} = sprintf('%s  local val = bit.band(bit.rshift(raw, %d), 0x%X)', indent, shift, mask);

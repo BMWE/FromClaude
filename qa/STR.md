@@ -1559,8 +1559,7 @@ reliability:
 **TC-WSD-FUNC-005 — Nested struct/union produces its own labeled sub-subtree**
 - Priority: High
 - Steps: Generate a dissector for the `Outer`/`Word16` fixtures.
-- Expected Result: `[struct: w] at byte N, size M` / `[union: ...] all members at byte N` comment
-  and a nested `subtree_<name>:add(buffer(...), "...")` call, with member fields emitted under the
+- Expected Result: a nested `subtree_<name>:add(buffer(...), "...")` call, with member fields emitted under the
   nested subtree variable, not the top-level `subtree`.
 
 **TC-WSD-FUNC-006 — Little-endian vs. big-endian field access method**
