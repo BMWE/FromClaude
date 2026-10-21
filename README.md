@@ -315,9 +315,73 @@ rx.get('checksum')                    % -> 249
 - A name in the file that is not a field of the protocol gives the warning
   `ScapyML:ChecksumManager:FieldNotFound`; a missing file gives
   `ScapyML:ChecksumManager:FileNotFound` and an empty manager.
-- More formulas (XOR, two's complement, ones' complement, header-only) are in
-  `checksums_example.txt`.
+- More formulas are in `checksums_example.txt` and in the examples below.
 - In the GUI use **Load Checksums File** before generating packets.
+
+---
+
+### Popular checksum examples
+
+Copy the lines you need into `checksums.txt`. The name on the left must be the
+packet field that stores the result. Inside the formula, `data` is the whole
+packet with that field zeroed.
+
+**Simple sums and XOR** (one-liners; `double(...)` avoids integer overflow):
+
+```
+# 8-bit sum
+checksum = @(data) mod(sum(double(data)), 256)
+
+# 8-bit two's complement (sum of all bytes incl. checksum == 0 mod 256)
+checksum = @(data) mod(-sum(double(data)), 256)
+
+# XOR of all bytes (LRC) - parity of each bit position
+checksum = @(data) sum(arrayfun(@(k) mod(sum(bitget(data, k)), 2) * 2^(k-1), 1:8))
+```
+
+**CRCs and standard checksums** (ready-made in `ScapyML.Crc`):
+
+| Name | Field size | Formula in `checksums.txt` |
+|---|---|---|
+| CRC-8 (poly 0x07) | 1 byte | `crc = @(data) ScapyML.Crc.crc8(data)` |
+| CRC-16/CCITT-FALSE | 2 bytes | `crc = @(data) ScapyML.Crc.crc16ccitt(data)` |
+| CRC-16/MODBUS | 2 bytes | `crc = @(data) ScapyML.Crc.crc16modbus(data)` |
+| CRC-32 (Ethernet/zip) | 4 bytes | `crc = @(data) ScapyML.Crc.crc32(data)` |
+| Internet checksum (RFC 1071, IP/UDP/TCP style) | 2 bytes | `checksum = @(data) ScapyML.Crc.internetChecksum(data)` |
+| Fletcher-16 | 2 bytes | `checksum = @(data) ScapyML.Crc.fletcher16(data)` |
+
+Check values for the ASCII text `123456789`: CRC-8 `0xF4`, CRC-16/CCITT-FALSE
+`0x29B1`, CRC-16/MODBUS `0x4B37`, CRC-32 `0xCBF43926`, Fletcher-16 `0x1EDE`.
+These are the published standard values, so you can verify with
+`dec2hex(ScapyML.Crc.crc32(uint8('123456789')))`.
+
+**Covering only part of the packet:**
+
+```
+# CRC-16 stored in the LAST 2 bytes, covering everything before it
+crc = @(data) ScapyML.Crc.crc16ccitt(data(1:end-2))
+
+# Checksum over the header only (first 8 bytes)
+hdr_sum = @(data) mod(sum(double(data(1:8))), 256)
+
+# Skip a 4-byte preamble, checksum the rest
+checksum = @(data) mod(sum(double(data(5:end))), 256)
+```
+
+**Two checksums in one packet** (e.g. a header CRC and a payload CRC) - give
+each its own line; they are applied in byte-offset order:
+
+```
+hdr_crc     = @(data) ScapyML.Crc.crc16ccitt(data(1:6))
+payload_crc = @(data) ScapyML.Crc.crc32(data(9:end-4))
+```
+
+Notes: the result is written big- or little-endian according to the protocol's
+endianness and truncated to the field size (1, 2, 4 or 8 bytes), so choose the
+field width that matches the algorithm (e.g. a `uint16_t` field for CRC-16).
+Formulas must return a non-negative number (use `mod(..., 2^bits)`). Custom
+checksums that need loops can be written as an ordinary `.m` function on the
+MATLAB path and called from the formula, like `ScapyML.Crc` is.
 
 ---
 
