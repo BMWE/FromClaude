@@ -33,6 +33,5 @@ weighted = @(data) mod(sum(uint32(data) .* uint32(1:numel(data))), 256)
 #   cm = ScapyML.ChecksumManager('checksums.txt');
 #   pkt = ScapyML.Packet('MyProtocol');
 #   pkt.set('msg_id', 42);
-#   pkt = cm.applyChecksums(pkt);  % Calculates and sets checksum
-#   binary = pkt.build();
+#   binary = pkt.buildWithChecksums(cm);  % Encodes, calculates and writes checksum
 # ============================================================================

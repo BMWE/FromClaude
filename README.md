@@ -265,6 +265,62 @@ standalone_app/
 
 ---
 
+## Checksum Calculation
+
+Checksums are computed from the **encoded bytes** and written back into a
+field of the packet, so they are always consistent with the other fields.
+
+**checksums.txt** — `fieldName = @(data) expression`, where `fieldName` is the
+packet field that receives the result and `data` is the packet as a `uint8`
+array. The expression must return a scalar number.
+
+```
+checksum = @(data) mod(sum(uint16(data)), 256)
+```
+
+**Example: calculate, then update after a field changes**
+
+```matlab
+% sensor.h:  typedef struct SensorMsg {
+%              uint8_t msg_id; uint8_t sensor_id; uint8_t value; uint8_t checksum;
+%            } SensorMsg;
+ScapyML('load', 'sensor.h', 'big');
+cm  = ScapyML.ChecksumManager('checksums.txt');
+
+pkt = ScapyML.Packet('SensorMsg');
+pkt.set('msg_id', 42);
+pkt.set('sensor_id', 7);
+pkt.set('value', 100);
+
+bytes = pkt.buildWithChecksums(cm);   % checksum = mod(42+7+100, 256) = 149
+bytes(4)                              % -> 149
+
+% Change a field and rebuild: the checksum is recalculated automatically
+pkt.set('value', 200);
+bytes = pkt.buildWithChecksums(cm);   % checksum = mod(42+7+200, 256) = 249
+bytes(4)                              % -> 249
+
+% Verify a received packet
+rx = ScapyML.Packet.fromBytes('SensorMsg', bytes);
+rx.get('checksum')                    % -> 249
+```
+
+**Rules**
+- Use `pkt.buildWithChecksums(cm)`; plain `pkt.build()` does not apply checksums,
+  so the checksum field is sent as set (0 by default).
+- The checksum field is zeroed before each calculation, so rebuilding always
+  gives the same result and the old value is never included in the sum.
+- With several checksums, they are calculated in order of byte offset; a later
+  checksum can therefore cover an earlier one.
+- A name in the file that is not a field of the protocol gives the warning
+  `ScapyML:ChecksumManager:FieldNotFound`; a missing file gives
+  `ScapyML:ChecksumManager:FileNotFound` and an empty manager.
+- More formulas (XOR, two's complement, ones' complement, header-only) are in
+  `checksums_example.txt`.
+- In the GUI use **Load Checksums File** before generating packets.
+
+---
+
 ## GUI Guide
 
 ### Main Interface
