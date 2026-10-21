@@ -29,6 +29,7 @@ classdef FieldDef
         Endian      (1,:) char = 'little'
         IsArray     (1,1) logical = false
         ArraySize   (1,1) double = 0
+        Packed      (1,1) logical = false  % true: no alignment padding before this field (packed layout)
     end
 
     methods

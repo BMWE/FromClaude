@@ -206,7 +206,7 @@ classdef WiresharkDissector
                         % Align field start position, except bit-fields
                         % which pack with no inter-field padding (v2.3.1, KI-001)
                         if ~f.IsBitField
-                            alignBits = ScapyML.ProtocolDef.alignmentOf(f.ByteSize) * 8;
+                            alignBits = ScapyML.ProtocolDef.fieldAlignBytes(f) * 8;
                             bitOffset = ScapyML.ProtocolDef.alignBitPos(bitOffset, alignBits);
                         end
                         fieldBit = bitOffset;
@@ -337,11 +337,11 @@ classdef WiresharkDissector
                         m.bfMask     = bitand(bitshift(rawMask, shift), 2^(nbytes*8) - 1);
                         bitOffset    = bitOffset + bits;
                     elseif f.IsArray
-                        alignBits = ScapyML.ProtocolDef.alignmentOf(f.ByteSize) * 8;
+                        alignBits = ScapyML.ProtocolDef.fieldAlignBytes(f) * 8;
                         bitOffset = ScapyML.ProtocolDef.alignBitPos(bitOffset, alignBits);
                         bitOffset = bitOffset + f.ByteSize * 8 * f.ArraySize;
                     else
-                        alignBits = ScapyML.ProtocolDef.alignmentOf(f.ByteSize) * 8;
+                        alignBits = ScapyML.ProtocolDef.fieldAlignBytes(f) * 8;
                         bitOffset = ScapyML.ProtocolDef.alignBitPos(bitOffset, alignBits);
                         bitOffset = bitOffset + f.ByteSize * 8;
                     end

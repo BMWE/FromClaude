@@ -23,9 +23,9 @@ function ScapyML_GUI()
     
     % Left panel - Controls
     leftPanel = uipanel(grid, 'Title', 'Controls', 'FontWeight', 'bold');
-    leftGrid = uigridlayout(leftPanel, [26 1]);  % 25 buttons + 1 flexible spacer
+    leftGrid = uigridlayout(leftPanel, [27 1]);  % 26 controls + 1 flexible spacer
     % Fixed heights for buttons (25px), flexible for spacer ('1x')
-    leftGrid.RowHeight = {25, 25, 25, 25, 25, ...  % Section 1: Load Headers (5 rows)
+    leftGrid.RowHeight = {25, 25, 25, 25, 25, 25, ...  % Section 1: Load Headers (6 rows)
                           25, 25, 25, 25, 25, ...  % Section 2: Protocol Info (5 rows)
                           25, 25, 25, 25, 25, ...  % Section 3: Packet (5 rows)
                           25, 25, 25, 25, 25, 25, 25, ...  % Section 4: Data (7 rows - added Save/Load MAT)
@@ -78,6 +78,10 @@ function ScapyML_GUI()
         'Items', {'big-endian (Motorola)', 'little-endian (Intel)'}, ...
         'ItemsData', {'big', 'little'}, ...
         'Value', 'big');
+    
+    cbPacked = uicheckbox(leftGrid, 'Text', 'Packed layout (no padding)', ...
+        'Value', false, ...
+        'Tooltip', 'Do not insert C-ABI alignment padding (e.g. uint8, uint8, uint32 -> uint32 at byte 2). Headers with #pragma pack(1) are detected automatically.');
     
     % --- Section 2: Protocol Info ---
     uilabel(leftGrid, 'Text', '═══ PROTOCOL INFO ═══', ...
@@ -195,11 +199,12 @@ function ScapyML_GUI()
         
         fullPath = fullfile(path, file);
         endian = getEndian();
+        packedArgs = getPackedArgs();
         
         try
             clearOutput();
             appendOutput(sprintf('Loading: %s', file));
-            ScapyML('load', fullPath, endian);
+            ScapyML('load', fullPath, endian, packedArgs{:});
             state.loadedProtocols = ScapyML('list');
             updateProtocolList();
             appendOutput('✓ Header loaded successfully');
@@ -208,6 +213,15 @@ function ScapyML_GUI()
         end
     end
     
+    function args = getPackedArgs()
+        % {'packed'} when the checkbox is on, otherwise {} (auto-detect pragma)
+        if cbPacked.Value
+            args = {'packed'};
+        else
+            args = {};
+        end
+    end
+
     function loadMultipleHeaders()
         [files, path] = uigetfile({'*.h', 'C Header Files (*.h)'}, ...
             'Select Header Files', 'MultiSelect', 'on');
@@ -221,6 +235,7 @@ function ScapyML_GUI()
         
         fullPaths = cellfun(@(f) fullfile(path, f), files, 'UniformOutput', false);
         endian = getEndian();
+        packedArgs = getPackedArgs();
         autoResolve = cbAutoResolve.Value;
         
         try
@@ -231,9 +246,9 @@ function ScapyML_GUI()
             end
             
             if autoResolve && numel(files) > 1
-                ScapyML('load', fullPaths, endian, 'auto');
+                ScapyML('load', fullPaths, endian, 'auto', packedArgs{:});
             else
-                ScapyML('load', fullPaths, endian);
+                ScapyML('load', fullPaths, endian, packedArgs{:});
             end
             
             state.loadedProtocols = ScapyML('list');

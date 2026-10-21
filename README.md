@@ -121,6 +121,27 @@ ScapyML('dissector', 'SensorMessage', 'sensor.lua', 5000);
 
 ---
 
+## Packed vs. Aligned Layout
+
+By default ScapyML follows the C ABI: a field is aligned to its own size, so
+`{ uint8_t a; uint8_t b; uint32_t c; }` puts `c` at **byte 4** (2 padding
+bytes) and the struct is 8 bytes. Most wire protocols are *packed*: `c` is at
+**byte 2** and the struct is 6 bytes. Use one of:
+
+```matlab
+ScapyML('load', 'msg.h', 'big', 'packed');      % no padding for this load
+ScapyML('load', 'msg.h', 'big', 'aligned');     % force C-ABI padding
+```
+
+- A header that contains `#pragma pack(1)` (or `#pragma pack(push, 1)`) is
+  detected automatically and loaded packed.
+- In the GUI tick **Packed layout (no padding)** before loading the header.
+- The same layout is used for encoding, decoding, field offsets and the
+  generated Wireshark Lua file.
+- The choice applies to the whole header file (not per struct).
+
+---
+
 ## Physical-to-Wire Conversion System
 
 ### Problem

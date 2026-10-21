@@ -80,7 +80,7 @@ classdef Codec
                         % Align field start position, except bit-fields
                         % which pack with no inter-field padding (v2.3.1, KI-001)
                         if ~f.IsBitField
-                            alignBits = ScapyML.ProtocolDef.alignmentOf(f.ByteSize) * 8;
+                            alignBits = ScapyML.ProtocolDef.fieldAlignBytes(f) * 8;
                             bitPos    = ScapyML.ProtocolDef.alignBitPos(bitPos, alignBits);
                         end
                         fieldStart = bitPos;
@@ -284,7 +284,7 @@ classdef Codec
                         % Align field start position, except bit-fields
                         % which pack with no inter-field padding (v2.3.1, KI-001)
                         if ~f.IsBitField
-                            alignBits = ScapyML.ProtocolDef.alignmentOf(f.ByteSize) * 8;
+                            alignBits = ScapyML.ProtocolDef.fieldAlignBytes(f) * 8;
                             bitPos    = ScapyML.ProtocolDef.alignBitPos(bitPos, alignBits);
                         end
                         fieldStart = bitPos;

@@ -27,8 +27,12 @@ classdef HeaderParser
         % Public entry points
         % ----------------------------------------------------------------
 
-        function protos = parseFile(filename, endian)
+        function protos = parseFile(filename, endian, packed)
+            % packed (optional): true = no alignment padding between fields
+            % (wire/packed layout); false = C-ABI natural alignment; []
+            % (default) = packed only if the file contains #pragma pack(1).
             if nargin < 2, endian = 'little'; end
+            if nargin < 3, packed = []; end
             fid = fopen(filename, 'r');
             if fid < 0
                 error('ScapyML:HeaderParser:FileNotFound', ...
@@ -36,13 +40,41 @@ classdef HeaderParser
             end
             src = fread(fid, '*char')';
             fclose(fid);
-            protos = ScapyML.HeaderParser.parseSource(src, endian);
+            protos = ScapyML.HeaderParser.parseSource(src, endian, packed);
         end
 
-        function protos = parseSource(src, endian)
+        function protos = parseSource(src, endian, packed)
             if nargin < 2, endian = 'little'; end
+            if nargin < 3, packed = []; end
+            if isempty(packed)
+                % Auto-detect  #pragma pack(1)  /  #pragma pack(push, 1)
+                packed = ~isempty(regexp(src, ...
+                    '#\s*pragma\s+pack\s*\(\s*(push\s*,\s*)?1\s*\)', 'once'));
+            end
             tokens = ScapyML.HeaderParser.tokenise(src);
             protos  = ScapyML.HeaderParser.parseTokens(tokens, endian);
+            if packed
+                for k = 1:numel(protos)
+                    if isa(protos{k}, 'ScapyML.ProtocolDef')
+                        protos{k} = ScapyML.HeaderParser.applyPacked(protos{k});
+                    end
+                end
+            end
+        end
+
+        % applyPacked: mark every field (recursively) as packed and
+        % recompute sizes bottom-up, so no alignment padding is inserted.
+        function p = applyPacked(p)
+            for k = 1:numel(p.Fields)
+                f = p.Fields{k};
+                if isa(f, 'ScapyML.FieldDef')
+                    f.Packed = true;
+                elseif isa(f, 'ScapyML.ProtocolDef')
+                    f = ScapyML.HeaderParser.applyPacked(f);
+                end
+                p.Fields{k} = f;
+            end
+            p = p.recompute();
         end
 
         % ----------------------------------------------------------------

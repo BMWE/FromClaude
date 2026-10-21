@@ -41,10 +41,9 @@ classdef ProtocolDef
             %   e.g. uint32_t must start on a 4-byte boundary; uint16_t on 2-byte.
             %   Bitfields and floats/doubles follow their storage-unit size.
             %
-            % NOTE: if your protocol is explicitly packed (__attribute__((packed))
-            %   or #pragma pack(1)), set obj.IsPacked=true (not yet implemented —
-            %   packed structs are uncommon in network protocols and are handled
-            %   by the protocol author ensuring correct byte sizes in the .h file).
+            % Packed layout: fields whose Packed flag is true (headers with
+            %   #pragma pack(1), or loaded with the 'packed' option) have no
+            %   alignment requirement, so no padding is inserted before them.
             total = 0;
 
             for k = 1:numel(obj.Fields)
@@ -58,7 +57,7 @@ classdef ProtocolDef
                         alignBits   = 0;  % packing handled by bit-level accumulation
                     else
                         elemBytes  = f.ByteSize;
-                        alignBytes = ScapyML.ProtocolDef.alignmentOf(elemBytes);
+                        alignBytes = ScapyML.ProtocolDef.fieldAlignBytes(f);
                         alignBits  = alignBytes * 8;
 
                         if ~obj.IsUnion && alignBits > 0
@@ -165,7 +164,7 @@ classdef ProtocolDef
                             fieldStart = startBit;
                         else
                             if ~f.IsBitField
-                                alignBits = ScapyML.ProtocolDef.alignmentOf(f.ByteSize) * 8;
+                                alignBits = ScapyML.ProtocolDef.fieldAlignBytes(f) * 8;
                                 bitPos = ScapyML.ProtocolDef.alignBitPos(bitPos, alignBits);
                             end
                             fieldStart = bitPos;
@@ -206,6 +205,17 @@ classdef ProtocolDef
     end
 
     methods (Static)
+        function a = fieldAlignBytes(f)
+            % Alignment (bytes) required before field f.
+            % Packed fields (header with #pragma pack(1), or loaded with the
+            % 'packed' option) have no alignment requirement.
+            if f.Packed
+                a = 1;
+            else
+                a = ScapyML.ProtocolDef.alignmentOf(f.ByteSize);
+            end
+        end
+
         function a = alignmentOf(byteSize)
             % Natural alignment for a field of byteSize bytes.
             % Follows standard C ABI: align to min(byteSize, 8).
@@ -250,7 +260,7 @@ classdef ProtocolDef
             for k = 1:numel(protoDef.Fields)
                 f = protoDef.Fields{k};
                 if isa(f, 'ScapyML.FieldDef') && ~f.IsBitField
-                    maxAlign = max(maxAlign, ScapyML.ProtocolDef.alignmentOf(f.ByteSize));
+                    maxAlign = max(maxAlign, ScapyML.ProtocolDef.fieldAlignBytes(f));
                 elseif isa(f, 'ScapyML.ProtocolDef')
                     maxAlign = max(maxAlign, ScapyML.ProtocolDef.structAlignBits(f) / 8);
                 end

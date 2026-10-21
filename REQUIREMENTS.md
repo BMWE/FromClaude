@@ -925,6 +925,10 @@ DependencyResolver.m
   now kept as nested blocks; the Lua bit-field masks are also computed
   union-aware (`WiresharkDissector.collectFieldsWithMeta`)
 - Removed: per-field `-- [struct]/[union]/[array]/[bit-field]` comments from generated Lua
+- Added: packed layout (no alignment padding): `ScapyML('load', file, endian, 'packed')`,
+  automatic detection of `#pragma pack(1)`, and a GUI checkbox. Default stays C-ABI
+  natural alignment (`uint8, uint8, uint32` -> the `uint32` at byte 4); packed puts it at byte 2.
+  Applies per header file; `__attribute__((packed))` on a struct is not supported.
 - Added: QA package (`qa/`: test plan, test specification, 16 automated suites)
 
 **Files Modified (additions):** ScapyML_fromCSV.m (new), ScapyML_GUI.m,

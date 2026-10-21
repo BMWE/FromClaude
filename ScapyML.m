@@ -72,9 +72,17 @@ function varargout = ScapyML(varargin)
             
             % Check for 'auto' flag for automatic dependency resolution
             autoResolve = false;
+            packedFlag  = [];   % [] = auto-detect #pragma pack(1) in each header
             fileArgs = varargin(2:end);
-            if numel(fileArgs) > 0 && ischar(fileArgs{end}) && strcmp(fileArgs{end}, 'auto')
-                autoResolve = true;
+            % Trailing flags, in any order: 'auto' (dependency order),
+            % 'packed' (no alignment padding), 'aligned' (force C-ABI padding)
+            while numel(fileArgs) > 0 && ischar(fileArgs{end}) && ...
+                    any(strcmp(fileArgs{end}, {'auto','packed','aligned'}))
+                switch fileArgs{end}
+                    case 'auto',    autoResolve = true;
+                    case 'packed',  packedFlag = true;
+                    case 'aligned', packedFlag = false;
+                end
                 fileArgs = fileArgs(1:end-1);
             end
             
@@ -122,7 +130,7 @@ function varargout = ScapyML(varargin)
             allProtos = {};
             for i = 1:numel(files)
                 fprintf('[ScapyML] Parsing: %s\n', files{i});
-                protos = ScapyML.HeaderParser.parseFile(files{i}, endian);
+                protos = ScapyML.HeaderParser.parseFile(files{i}, endian, packedFlag);
                 allProtos = [allProtos, protos]; %#ok<AGROW>
 
                 for k = 1:numel(protos)
@@ -278,7 +286,7 @@ end
 function ScapyML_help()
     fprintf('\nScapyML - MATLAB Scapy-like Protocol Framework\n');
     fprintf('-----------------------------------------------\n');
-    fprintf('  ScapyML(''load'', files [, endian] [,''auto'']) - Parse header(s)\n');
+    fprintf('  ScapyML(''load'', files [, endian] [,''auto''] [,''packed'']) - Parse header(s)\n');
     fprintf('  ScapyML(''packet'', Name [, f, v, ...])       - Create packet\n');
     fprintf('  ScapyML(''csv'', file.csv, Name)              - Load from CSV\n');
     fprintf('  ScapyML(''send'', pkt/pkts [, ip, port])      - Send UDP\n');
