@@ -54,7 +54,7 @@ classdef WiresharkDissector
             lines{end+1} = 'local f = {}';
             lines{end+1} = '';
 
-            allMeta = ScapyML.WiresharkDissector.collectFieldsWithMeta(p.Fields, pname);
+            allMeta = ScapyML.WiresharkDissector.collectFieldsWithMeta(p.Fields, pname, 0, p.IsUnion);
             for k = 1:numel(allMeta)
                 m       = allMeta{k};
                 fd      = m.fd;
@@ -312,18 +312,19 @@ classdef WiresharkDissector
         %   .bfNbytes    - number of container bytes needed
         %   .bfMask      - bitmask positioned within the container (for ProtoField)
         % ----------------------------------------------------------------
-        function [meta, bitOffset] = collectFieldsWithMeta(fieldList, pname, bitOffset)
-            % NOTE: this function has no isUnion parameter for its OWN
-            % container — it always treats fieldList as sequential (struct)
-            % members, matching its pre-existing behaviour. This is correct
-            % for the common case (fieldList belongs to a struct). A
-            % top-level protocol that is itself a union is a separate,
-            % narrower limitation than the alignment consistency fixed in
-            % v2.3.1 (KI-001) and is not addressed here.
+        function [meta, bitOffset] = collectFieldsWithMeta(fieldList, pname, bitOffset, isUnion)
+            % isUnion: true when fieldList belongs to a union, so every member
+            % starts at the same bit position (keeps the bit-field masks
+            % consistent with emitFieldList, which also overlaps union members).
             if nargin < 3, bitOffset = 0; end
+            if nargin < 4, isUnion = false; end
+            unionStart = bitOffset;
             meta = {};
             for k = 1:numel(fieldList)
                 f = fieldList{k};
+                if isUnion
+                    bitOffset = unionStart;
+                end
                 if isa(f, 'ScapyML.FieldDef')
                     if f.IsBitField
                         % Bit-fields pack with no inter-field padding —
@@ -355,7 +356,7 @@ classdef WiresharkDissector
                     bitOffset = ScapyML.ProtocolDef.alignBitPos(bitOffset, alignBits);
                     startBit = bitOffset;
                     [sub, childOffset] = ScapyML.WiresharkDissector.collectFieldsWithMeta( ...
-                        f.Fields, pname, bitOffset);
+                        f.Fields, pname, bitOffset, f.IsUnion);
                     meta = [meta, sub]; %#ok<AGROW>
                     if f.IsUnion
                         bitOffset = startBit + f.TotalBits;

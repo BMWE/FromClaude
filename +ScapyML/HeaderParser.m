@@ -240,7 +240,7 @@ classdef HeaderParser
                 end
 
                 [entries, pos, lastComment] = ScapyML.HeaderParser.parseField( ...
-                    tokens, pos, n, knownTypes, endian, lastComment);
+                    tokens, pos, n, knownTypes, endian, lastComment, isUnion);
 
                 for fi = 1:numel(entries)
                     proto = proto.addField(entries{fi});
@@ -291,7 +291,12 @@ classdef HeaderParser
         % ----------------------------------------------------------------
 
         function [entries, pos, lastComment] = parseField( ...
-                tokens, pos, n, knownTypes, endian, lastComment)
+                tokens, pos, n, knownTypes, endian, lastComment, parentIsUnion)
+            % parentIsUnion (optional): true if the enclosing block is a union.
+            % Needed so an anonymous struct inside a union (or an anonymous
+            % union inside a struct) keeps its own layout instead of being
+            % flattened into the parent with the wrong overlap semantics.
+            if nargin < 7, parentIsUnion = []; end
 
             entries = {};
             if pos > n
@@ -337,7 +342,7 @@ classdef HeaderParser
                         innerComment = tok.text; pos = pos + 1; continue;
                     end
                     [innerEntries, pos, innerComment] = ScapyML.HeaderParser.parseField( ...
-                        tokens, pos, n, knownTypes, endian, innerComment);
+                        tokens, pos, n, knownTypes, endian, innerComment, inlineIsUnion);
                     for fi = 1:numel(innerEntries)
                         inlineProto = inlineProto.addField(innerEntries{fi});
                     end
@@ -374,7 +379,25 @@ classdef HeaderParser
                 end
                 lastComment = '';  % reset (comment was for this entry)
 
-                if isempty(fname)
+                if isempty(fname) && arraySize == 1 && ~isempty(parentIsUnion) && ...
+                        inlineIsUnion ~= parentIsUnion && ~isempty(inlineProto.Fields)
+                    % Anonymous block of the OPPOSITE kind to its parent, e.g.
+                    %   union { uint8_t raw; struct { uint8_t a:4; uint8_t b:4; }; };
+                    % Flattening would give its members the parent's layout
+                    % (the struct's bit-fields would all overlap at the start of
+                    % the union). Keep it as a nested ProtocolDef instead, with
+                    % the member names unchanged (C11 anonymous-member access).
+                    firstName = '';
+                    for fi = 1:numel(inlineProto.Fields)
+                        if isa(inlineProto.Fields{fi}, 'ScapyML.FieldDef')
+                            firstName = inlineProto.Fields{fi}.Name; break;
+                        end
+                    end
+                    if isempty(firstName), firstName = 'blk'; end
+                    if inlineIsUnion, kindTag = 'union'; else, kindTag = 'struct'; end
+                    childName = ScapyML.NameShortener.shorten(sprintf('anon_%s_%s', kindTag, firstName));
+                    entries{end+1} = ScapyML.HeaderParser.prefixProto(inlineProto, '', childName, endian);
+                elseif isempty(fname)
                     % Truly anonymous (no field name): flatten its fields directly into parent
                     % This is rare but valid C; treat like struct members without prefix.
                     for rep = 1:arraySize

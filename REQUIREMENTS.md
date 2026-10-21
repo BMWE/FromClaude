@@ -918,6 +918,13 @@ DependencyResolver.m
 - Added: `ScapyML.Crc` checksum library and README checksum examples
 - Fixed: documentation examples used an invalid XOR formula
   (`xor(data(2:end))` needs two arguments); replaced by a bit-parity formula
+- Fixed: anonymous `struct`/`union` blocks of the opposite kind to their parent
+  (e.g. an anonymous bit-field struct inside a union next to a `uint8_t`) were
+  flattened into the parent, so their members got the wrong overlap/offset
+  semantics and the generated Lua placed them at shifted positions. They are
+  now kept as nested blocks; the Lua bit-field masks are also computed
+  union-aware (`WiresharkDissector.collectFieldsWithMeta`)
+- Removed: per-field `-- [struct]/[union]/[array]/[bit-field]` comments from generated Lua
 - Added: QA package (`qa/`: test plan, test specification, 16 automated suites)
 
 **Files Modified (additions):** ScapyML_fromCSV.m (new), ScapyML_GUI.m,

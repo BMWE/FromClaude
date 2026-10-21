@@ -2349,3 +2349,13 @@ CLI/GUI happy paths tested as fully functional throughout) — the framework's c
 encode/decode/transmit capability was never at structural risk. A live MATLAB re-run of the full
 suite (this analysis was performed via static source reading, without an interactive MATLAB
 session) is still recommended before release to confirm all fixes behave as traced.
+
+### KI-NEW-08 — Anonymous opposite-kind block flattened (FIXED, unverified by execution)
+- **Symptom:** `union { uint8_t raw; struct { uint8_t hi:4; uint8_t lo:4; }; }` produced Lua where the
+  union members and the struct's bit-fields were shifted relative to each other (and an anonymous
+  `union` inside a `struct` became sequential members).
+- **Root cause:** `HeaderParser.parseField` flattened every anonymous block into its parent, so members took
+  the parent's layout; `WiresharkDissector.collectFieldsWithMeta` also ignored union semantics.
+- **Fix:** opposite-kind anonymous blocks stay nested; mask computation is union-aware.
+- **Automated tests:** `qa/tests/TestManualUnionSuite.m` (2 tests).
+
