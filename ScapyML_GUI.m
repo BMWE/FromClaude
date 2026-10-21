@@ -33,6 +33,9 @@ function ScapyML_GUI()
                           '1x'};                   % Flexible spacer at bottom
     leftGrid.Padding = [10 10 10 10];
     leftGrid.RowSpacing = 5;
+    % Show a vertical scroll bar when the window is too small (or not
+    % maximized) to show all the buttons.
+    leftGrid.Scrollable = 'on';
     
     % Right panel - Output/View
     rightPanel = uipanel(grid, 'Title', 'Output', 'FontWeight', 'bold');
