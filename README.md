@@ -1,7 +1,7 @@
 # ScapyML Framework - Complete Documentation
 
-**Version:** 1.2  
-**Date:** March 2026  
+**Version:** 2.3.3  
+**Date:** October 2026  
 **Author:** ScapyML Development Team
 
 ---
@@ -9,8 +9,8 @@
 ## Quick Start
 
 ### Installation
-1. Extract `ScapyML_framework.zip`
-2. Add `matlab_scapy` folder to MATLAB path
+1. Clone or download this repository
+2. Add the repository folder (the one containing `ScapyML.m` and `+ScapyML/`) to the MATLAB path
 3. Run `ScapyML_GUI` or use command-line interface
 
 ### Basic Example
@@ -364,37 +364,10 @@ offsets = proto.getFieldOffsets()
 
 ## Testing
 
-### Run All Tests
-
-```matlab
->> cd matlab_scapy
->> run_all_tests
-```
-
-This runs:
-1. Byte offset verification
-2. Comprehensive feature tests (12 tests)
-3. Edge case tests (7 tests)
-
-### Expected Output
-
-```
-✓✓✓ ALL TESTS PASSED ✓✓✓
-Total: 19/19 passed (100%)
-```
-
-### Test Coverage
-
-- ✅ All C types
-- ✅ Bit-fields
-- ✅ Arrays
-- ✅ Nested structures
-- ✅ Unions
-- ✅ Enums
-- ✅ Encoding/decoding
-- ✅ CSV loading
-- ✅ Conversions
-- ✅ Edge cases
+This release contains the source only; the automated test suites are not
+included. Tests use `matlab.unittest` and are run with `runtests` / `runAllTests`
+from the folder that contains the `tests/` directory. Note: the fixes in v2.3.3
+have been verified by static review only and still need a live MATLAB test run.
 
 ---
 
@@ -431,38 +404,45 @@ cm.convert('field', testValue)  % Test manually
 
 ## Examples Included
 
-- `quick_start.m` - Basic usage
-- `complete_example.m` - Full workflow
-- `array_example.m` - Array handling
-- `conversions_example.txt` - Conversion templates
-- `test_*.h` - Test protocols
-- `test_*_suite.m` - Test scripts
+- `conversions_example.txt` - Physical-to-wire conversion templates
+- `checksums_example.txt` - Checksum definitions
 
 ---
 
 ## File Structure
 
 ```
-ScapyML_framework/
+ScapyML/
 ├── README.md                    ← This file
-├── ScapyML.m                    ← Main interface
+├── REQUIREMENTS.md              ← Requirements and full change history
+├── ScapyML.m                    ← Main command-line interface
 ├── ScapyML_GUI.m                ← GUI
-├── ScapyML_fromCSV.m            ← CSV loader
+├── ScapyML_fromCSV.m            ← CSV loader (defaults + conversions)
 ├── conversions_example.txt      ← Conversion templates
-├── +ScapyML/                    ← Core classes
-│   ├── HeaderParser.m
-│   ├── Packet.m
-│   ├── Codec.m
-│   ├── ConversionManager.m      ← NEW
-│   └── ...
-├── test_*.h                     ← Test protocols
-├── test_*.m                     ← Test scripts
-└── run_all_tests.m              ← Test runner
+├── checksums_example.txt        ← Checksum templates
+└── +ScapyML/                    ← Core classes
+    ├── HeaderParser.m, DependencyResolver.m, NameShortener.m
+    ├── ProtocolRegistry.m, ProtocolDef.m, FieldDef.m, EnumDef.m
+    ├── Packet.m, Codec.m
+    ├── DefaultsManager.m, ConversionManager.m, ChecksumManager.m
+    ├── CsvLoader.m
+    ├── PacketSender.m, UdpSender.m
+    └── WiresharkDissector.m, MultiProtocolDissector.m, DiscriminatorConfig.m
 ```
 
 ---
 
 ## Version History
+
+**v2.3.3 (October 2026)**
+- ✅ Cross-file type resolution: files are parsed/registered in order; enum-only headers are dependency sources; unresolved types raise `ScapyML:HeaderParser:UnresolvedType`
+- ✅ Fixed: `ScapyML('fromCSV', ...)` was unreachable (the `csv` case shadowed it); now works with defaults and conversion files
+- ✅ Fixed: GUI "Load from CSV" and the multi-protocol discriminator dialog called non-existent functions/methods
+- ✅ Fixed: GUI local variable `size` shadowed the builtin
+- ✅ Added: `ScapyML:ProtocolRegistry:Overwrite` warning when a protocol name is re-registered
+- ✅ Added: clear `ScapyML:Parser:InvalidArray` error for `#define` macro array sizes (macros are not expanded; use a literal number)
+- ⚠ Known limitation: a type is resolved only if its defining file was parsed earlier in the same `load` call (or `'auto'` ordering is used)
+- ⚠ Not fixed: `BitFieldGrouper` and `DiscriminatorConfig.fromGUI()` are unused (dead code)
 
 **v1.2 (March 2026)**
 - ✅ Physical-to-wire conversion system
@@ -493,6 +473,5 @@ MIT License
 - Physical-to-Wire Conversion → conversions.txt format
 - GUI Guide → Button functions
 - API Reference → Function signatures
-- Testing → Validation suite
 
 **End of README**
