@@ -16,7 +16,7 @@ classdef ChecksumManager
 % Example checksums.txt:
 %   checksum = @(data) sum(data)
 %   crc = @(data) mod(sum(uint16(data)), 65536)
-%   xor_checksum = @(data) bitxor(data(1), xor(data(2:end)))
+%   xor_checksum = @(data) sum(arrayfun(@(k) mod(sum(bitget(data, k)), 2) * 2^(k-1), 1:8))
 %   header_sum = @(data) mod(sum(data(1:10)), 256)
 %
 % USAGE:
@@ -316,7 +316,7 @@ classdef ChecksumManager
             fprintf('%% Sum of all bytes (16-bit result)\n');
             fprintf('checksum16 = @(data) mod(sum(uint16(data)), 65536)\n\n');
             fprintf('%% XOR of all bytes\n');
-            fprintf('xor_checksum = @(data) bitxor(data(1), xor(data(2:end)))\n\n');
+            fprintf('xor_checksum = @(data) sum(arrayfun(@(k) mod(sum(bitget(data, k)), 2) * 2^(k-1), 1:8))\n\n');
             fprintf('%% CRC-like: sum with carry\n');
             fprintf('crc = @(data) mod(sum(uint32(data)) + floor(sum(uint32(data))/256), 256)\n\n');
             fprintf('%% Header-only checksum (first 10 bytes)\n');

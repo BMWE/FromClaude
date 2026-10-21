@@ -1,7 +1,7 @@
 # ScapyML - Requirements & Functional Specification
 
 **Version:** 2.3.3  
-**Last Updated:** March 25, 2026  
+**Last Updated:** October 21, 2026  
 **Author:** Michael (SW Architect, Verification Manager, Implementer)
 
 ---
@@ -192,6 +192,20 @@ The framework implements a 5-layer architecture:
 - Support multiple checksum fields
 - Write checksum back to designated field
 - Validate formula syntax on load
+- Zero the target checksum field before each calculation, so rebuilding a
+  packet always gives the same result (idempotent)
+- Apply multiple checksums in byte-offset order (a later checksum may cover
+  an earlier one)
+- Entry point: `Packet.buildWithChecksums(cm)`; plain `build()` does not apply checksums
+- Warn (do not fail) on: missing file (`ScapyML:ChecksumManager:FileNotFound`),
+  unknown field (`...:FieldNotFound`), non-function right-hand side
+  (`...:NotFunction`), non-scalar result (`...:InvalidResult`)
+- Result written big/little endian per protocol, truncated to the field size
+  (1, 2, 4 or 8 bytes); formulas must return a non-negative number
+- Ship a library of standard algorithms, `ScapyML.Crc`: `crc8`,
+  `crc16ccitt`, `crc16modbus`, `crc32`, `internetChecksum` (RFC 1071),
+  `fletcher16`; verified against the published check values for `123456789`
+  (0xF4, 0x29B1, 0x4B37, 0xCBF43926, 0x1EDE)
 
 **Configuration Format:**
 ```matlab
@@ -201,10 +215,12 @@ fieldName = @(data) expression
 **Example:**
 ```matlab
 checksum = @(data) mod(sum(uint16(data)), 256)
-crc = @(data) bitxor(data(1), xor(data(2:end)))
+crc16 = @(data) ScapyML.Crc.crc16ccitt(data(1:end-2))   % CRC in the last 2 bytes
+xor_check = @(data) sum(arrayfun(@(k) mod(sum(bitget(data, k)), 2) * 2^(k-1), 1:8))
 ```
 
-**Status:** ✅ Implemented v1.5 (CLI), v2.0 (GUI)
+**Status:** ✅ Implemented v1.5 (CLI), v2.0 (GUI); idempotent zeroing v2.3.1;
+`ScapyML.Crc` library v2.3.3
 
 ---
 
@@ -275,8 +291,16 @@ protocol_id = 42
 - Apply conversions if specified
 - Apply defaults if specified
 - Report row count
+- Available from the command line as `ScapyML('fromCSV', protocol, csv, [defaults], [conversions])`
+  (aliases `csv2packets`, `autocsv`) and through `ScapyML_fromCSV`; a missing
+  defaults file gives warning `ScapyML:fromCSV:DefaultsFileNotFound` and loading continues
+- Conversions are applied once per raw column (no double scaling)
+- Wide-file performance: read only the CSV columns that map to protocol
+  fields, build packets in blocks through a fast internal constructor, and
+  convert whole columns at once (`ConversionManager.convertVector`), falling
+  back to element-wise conversion when a formula is not vectorizable
 
-**Status:** ✅ Implemented v1.1
+**Status:** ✅ Implemented v1.1; CLI path fixed and bulk loading accelerated v2.3.3
 
 ---
 
@@ -664,7 +688,7 @@ ScapyML.PacketSender.sendWithTiming(packets, '192.168.1.100', 5000, ...
 
 checksum = @(data) mod(sum(uint16(data)), 256)
 crc16 = @(data) mod(sum(uint16(data)), 65536)
-xor_check = @(data) bitxor(data(1), xor(data(2:end)))
+xor_check = @(data) sum(arrayfun(@(k) mod(sum(bitget(data, k)), 2) * 2^(k-1), 1:8))
 ```
 
 #### Conversion Configuration (`conversions.txt`)
@@ -840,6 +864,15 @@ Complete
 3. **Timing Precision:** OS-dependent, best on low-load systems
 4. **MAT File Size:** Large collections (>100MB) may be slow
 5. **Protocol Changes:** Changing .h file requires reload
+6. **Macros:** `#define` constants are not expanded; an array size given as a
+   macro name raises `ScapyML:Parser:InvalidArray` (use a literal number)
+7. **Cross-call type resolution:** a type is resolved only if its defining file
+   was parsed earlier in the same `load` call (or `'auto'` ordering is used)
+8. **Unused code:** `BitFieldGrouper`, `WiresharkDissector.emitOneBitField`
+   and the `DiscriminatorConfig.fromGUI` fallback are not reached by any
+   shipped entry point
+9. **Verification:** the v2.3.3 fixes and additions were verified by code
+   review; a full MATLAB test run is still required
 
 ---
 
@@ -870,6 +903,25 @@ Complete
 
 **Files Modified:** ScapyML.m, ProtocolRegistry.m, HeaderParser.m,
 DependencyResolver.m
+
+**Also in v2.3.3 (fixes and additions, October 2026):**
+- Fixed: `ScapyML('fromCSV', ...)` was unreachable because the `csv` case
+  shadowed it; added `ScapyML_fromCSV.m` (defaults + conversions)
+- Fixed: GUI "Load from CSV" and the multi-protocol discriminator dialog
+  called functions/methods that did not exist; fixed a local variable `size`
+  that shadowed the MATLAB builtin
+- Added: `ScapyML:ProtocolRegistry:Overwrite` warning when a protocol name is
+  re-registered
+- Added: clear `ScapyML:Parser:InvalidArray` error for macro array sizes
+- Performance: CSV loading of wide files (column-selective read, block-built
+  packets, vectorized conversions)
+- Added: `ScapyML.Crc` checksum library and README checksum examples
+- Fixed: documentation examples used an invalid XOR formula
+  (`xor(data(2:end))` needs two arguments); replaced by a bit-parity formula
+- Added: QA package (`qa/`: test plan, test specification, 16 automated suites)
+
+**Files Modified (additions):** ScapyML_fromCSV.m (new), ScapyML_GUI.m,
+CsvLoader.m, ConversionManager.m, Packet.m, Crc.m (new), README.md
 
 ### v2.3.1 — Critical Bit-Field & Alignment Fixes
 **Changes (all discovered via matlab.unittest regression testing against this spec):**

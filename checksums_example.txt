@@ -11,7 +11,7 @@ checksum = @(data) mod(sum(uint16(data)), 256)
 checksum16 = @(data) mod(sum(uint16(data)), 65536)
 
 # XOR checksum - lightweight
-xor_checksum = @(data) bitxor(data(1), xor(data(2:end)))
+xor_checksum = @(data) sum(arrayfun(@(k) mod(sum(bitget(data, k)), 2) * 2^(k-1), 1:8))
 
 # Two's complement (8-bit) - many protocols use this
 twos_comp = @(data) mod(-sum(uint16(data)), 256)
