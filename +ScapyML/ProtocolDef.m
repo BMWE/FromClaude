@@ -31,19 +31,13 @@ classdef ProtocolDef
         end
 
         function obj = recompute(obj)
-            % Recalculate TotalBits from field list, respecting C ABI alignment.
+            % Recalculate TotalBits from the field list.
             %
             % For unions:  TotalBits = MAX member size (all members overlap at offset 0).
-            % For structs: TotalBits = SUM of member sizes WITH natural alignment padding.
+            % For structs: TotalBits = SUM of member sizes (packed, no padding).
             %
-            % Natural alignment rule (standard C ABI):
-            %   A field of size N bytes must start at a bit offset divisible by N*8.
-            %   e.g. uint32_t must start on a 4-byte boundary; uint16_t on 2-byte.
-            %   Bitfields and floats/doubles follow their storage-unit size.
-            %
-            % Packed layout: fields whose Packed flag is true (headers with
-            %   #pragma pack(1), or loaded with the 'packed' option) have no
-            %   alignment requirement, so no padding is inserted before them.
+            % Layout is ALWAYS PACKED: no alignment padding is inserted
+            %   (see fieldAlignBytes), so a struct's size is the sum of its members.
             total = 0;
 
             for k = 1:numel(obj.Fields)
@@ -205,15 +199,13 @@ classdef ProtocolDef
     end
 
     methods (Static)
-        function a = fieldAlignBytes(f)
-            % Alignment (bytes) required before field f.
-            % Packed fields (header with #pragma pack(1), or loaded with the
-            % 'packed' option) have no alignment requirement.
-            if f.Packed
-                a = 1;
-            else
-                a = ScapyML.ProtocolDef.alignmentOf(f.ByteSize);
-            end
+        function a = fieldAlignBytes(~)
+            % ALWAYS PACKED: ScapyML lays out fields back to back with no
+            % alignment padding (wire-protocol layout), e.g.
+            %   { uint8_t a; uint8_t b; uint32_t c; }  ->  c at byte 2, size 6.
+            % Every layout computation (recompute, getFieldOffsets, Codec,
+            % Wireshark generator) goes through this one function.
+            a = 1;
         end
 
         function a = alignmentOf(byteSize)

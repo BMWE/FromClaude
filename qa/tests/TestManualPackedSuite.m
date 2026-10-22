@@ -1,8 +1,7 @@
 classdef TestManualPackedSuite < matlab.unittest.TestCase
-% Packed (no padding) layout vs. C-ABI natural alignment.
+% ScapyML layout is ALWAYS packed (no alignment padding):
 % struct { unsigned char a; unsigned char b; unsigned int c; }
-%   aligned (default): c at byte 4, size 8
-%   packed           : c at byte 2, size 6
+%   c at byte 2, struct size 6
 
     properties
         TempFolder
@@ -42,39 +41,50 @@ classdef TestManualPackedSuite < matlab.unittest.TestCase
 
     methods (Test)
 
-        function tcDefaultKeepsCAbiPadding(testCase)
+        function tcLayoutIsAlwaysPacked(testCase)
             f = testCase.writeHeader('m_default.h', false);
             p = ScapyML.HeaderParser.parseFile(f, 'big');
-            testCase.verifyEqual(testCase.offsetOf(p{1}, 'c'), 4);
-            testCase.verifyEqual(p{1}.totalBytes(), 8);
-        end
-
-        function tcPackedOptionPlacesIntAtByte2(testCase)
-            f = testCase.writeHeader('m_opt.h', false);
-            p = ScapyML.HeaderParser.parseFile(f, 'big', true);
+            testCase.verifyEqual(testCase.offsetOf(p{1}, 'a'), 0);
+            testCase.verifyEqual(testCase.offsetOf(p{1}, 'b'), 1);
             testCase.verifyEqual(testCase.offsetOf(p{1}, 'c'), 2);
             testCase.verifyEqual(p{1}.totalBytes(), 6);
-
-            out = fullfile(testCase.TempFolder, 'm_opt.lua');
-            ScapyML.WiresharkDissector.generate(p{1}, out);
-            testCase.verifyTrue(contains(fileread(out), 'buffer(2, 4)'), ...
-                'Lua must read the 32-bit field from byte 2');
         end
 
-        function tcPragmaPack1IsDetectedAutomatically(testCase)
+        function tcPragmaPackHeaderGivesTheSameLayout(testCase)
             f = testCase.writeHeader('m_pragma.h', true);
             p = ScapyML.HeaderParser.parseFile(f, 'big');
             testCase.verifyEqual(testCase.offsetOf(p{1}, 'c'), 2);
             testCase.verifyEqual(p{1}.totalBytes(), 6);
         end
 
-        function tcCliPackedFlagAndEncoding(testCase)
-            f = testCase.writeHeader('m_cli.h', false);
-            evalc('ScapyML(''load'', f, ''big'', ''packed'');');
+        function tcLuaReadsIntFromByte2(testCase)
+            f = testCase.writeHeader('m_lua.h', false);
+            p = ScapyML.HeaderParser.parseFile(f, 'big');
+            out = fullfile(testCase.TempFolder, 'm_lua.lua');
+            ScapyML.WiresharkDissector.generate(p{1}, out);
+            txt = fileread(out);
+            testCase.verifyTrue(contains(txt, 'buffer(1, 1)'), 'second uint8 at byte 1');
+            testCase.verifyTrue(contains(txt, 'buffer(2, 4)'), 'uint32 at byte 2');
+        end
+
+        function tcEncodingHasNoPadding(testCase)
+            f = testCase.writeHeader('m_enc.h', false);
+            evalc('ScapyML(''load'', f, ''big'');');
             pkt = ScapyML.Packet('M');
             pkt.set('a', 1); pkt.set('b', 2); pkt.set('c', 16909060);  % 0x01020304
-            bytes = pkt.build();
-            testCase.verifyEqual(bytes, uint8([1 2 1 2 3 4]));
+            testCase.verifyEqual(pkt.build(), uint8([1 2 1 2 3 4]));
+        end
+
+        function tcNestedStructAndDoubleArePacked(testCase)
+            f = fullfile(testCase.TempFolder, 'nested.h');
+            fid = fopen(f, 'w');
+            fprintf(fid, 'typedef struct { uint8_t t; uint16_t v; } Inner;\n');
+            fprintf(fid, 'typedef struct { uint8_t a; Inner in; double d; } Outer;\n');
+            fclose(fid);
+            p = ScapyML.HeaderParser.parseFile(f, 'big');
+            outer = p{2};
+            testCase.verifyEqual(p{1}.totalBytes(), 3);      % 1 + 2
+            testCase.verifyEqual(outer.totalBytes(), 12);    % 1 + 3 + 8
         end
 
     end

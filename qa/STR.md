@@ -326,8 +326,8 @@ All **191** manual test cases in this document, grouped by module in execution o
   2. `p = ScapyML.ProtocolRegistry.instance().get('AllTypes');`
   3. Inspect `p.Fields{k}.ByteSize` for each field.
 - Expected Result: `a`→1, `b`→2, `c`→4, `d`→8, `e`→4, `f`→8. `p.totalBytes()` equals 1+2+4+8+4+8 = 27
-  **plus** any C-ABI alignment padding (see TC-PROTO-FUNC-002) — with natural alignment the actual
-  total should be 32 bytes (a@0, pad, b@2, c@4, d@8, e@16, f@24, size rounds to 8-byte multiple).
+  and, because the layout is always packed (no padding, see TC-PROTO-FUNC-002), the total is exactly
+  27 bytes (a@0, b@1, c@3, d@7, e@15, f@19).
 - Positive/Happy Path.
 
 **TC-HDR-FUNC-002 — Parse signed integer types and char variants**
@@ -392,8 +392,8 @@ All **191** manual test cases in this document, grouped by module in execution o
 - Steps: Load (single file — struct order matters, `Word` before `Outer`); inspect
   `Outer.Fields` — expect one `ProtocolDef` child named `w`; `fieldNames()` should list `w_lo`,
   `w_hi`, `id` (depth-first, prefixed).
-- Expected Result: Field names prefixed correctly; `Outer.totalBytes()` reflects `Word` (2 bytes,
-  padded per alignment) + `id` (4 bytes) with correct inter-struct alignment.
+- Expected Result: Field names prefixed correctly; `Outer.totalBytes()` reflects `Word` (2 bytes)
+  + `id` (4 bytes) = 6 bytes, packed (no padding).
 
 **TC-HDR-FUNC-007 — Parse a nested named union member**
 - Priority: Critical
@@ -556,13 +556,12 @@ All **191** manual test cases in this document, grouped by module in execution o
 - Steps: Load; `p = reg.get('U'); p.totalBytes()`.
 - Expected Result: `totalBytes()==4` (max of 1 and 4), not 5.
 
-**TC-PROTO-FUNC-002 — Struct C-ABI alignment padding is applied**
+**TC-PROTO-FUNC-002 — Layout is always packed (no alignment padding)**
 - Priority: Critical
 - Test Data: `typedef struct { uint8_t a; uint32_t b; } P;`
-- Steps: Load; `p.totalBytes()`.
-- Expected Result: `totalBytes()==8` — `a` at byte 0, 3 bytes padding, `b` at byte 4 (4-byte
-  aligned), total rounds to the struct's own alignment requirement (4) → 8 bytes. This directly
-  exercises the KI-001 fix.
+- Steps: Load; `p.totalBytes()`; `p.getFieldOffsets()`.
+- Expected Result: `totalBytes()==5`: `a` at byte 0 and `b` at byte 1, with no padding anywhere
+  (wire-protocol layout). Automated: `TestManualPackedSuite`.
 
 **TC-PROTO-FUNC-003 — Nested struct alignment uses the child's largest-member alignment**
 - Priority: High
@@ -572,7 +571,8 @@ All **191** manual test cases in this document, grouped by module in execution o
   typedef struct { uint8_t a; Inner in; } Outer;
   ```
 - Steps: Load; inspect `Outer.getFieldOffsets()` for `in_x`.
-- Expected Result: `in_x` starts at byte offset 2 (aligned to `Inner`'s 2-byte requirement, not
+- Expected Result: (packed layout) `in_x` starts at byte offset 1, immediately after `a`; the old
+  C-ABI expectation was byte offset 2 (aligned to `Inner`'s 2-byte requirement, not
   byte 1).
 
 **TC-PROTO-FUNC-004 — `getFieldOffsets()` matches actual encoded byte positions**
@@ -610,8 +610,7 @@ All **191** manual test cases in this document, grouped by module in execution o
 **TC-PROTO-BOUND-002 — 8-byte (`double`/`int64_t`/`uint64_t`) alignment boundary**
 - Priority: Medium
 - Test Data: `typedef struct { uint8_t a; double d; } D;`
-- Expected Result: `d` aligned to byte 8 (per `alignmentOf` capping alignment at 8); `totalBytes()`
-  rounds to a multiple of 8 → 16.
+- Expected Result: packed layout: `d` at byte 1; `totalBytes()` is 9 (no alignment, no rounding).
 
 ---
 
